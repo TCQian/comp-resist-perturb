@@ -68,7 +68,7 @@ def adaptive_frequency_attack(
     """
     Generate a perturbed image (unlearnable example) using an adaptive frequency attack.
     image_tensor: shape [1, C, H, W], float [0,1].
-    model: surrogate model used to compute loss.
+    model: surrogate model used to compute loss. Should be in eval mode.
     target_label: ground-truth label (int) for computing loss.
     criterion: loss function (e.g., cross entropy).
     """
@@ -76,7 +76,6 @@ def adaptive_frequency_attack(
     perturbed.requires_grad = True
 
     for _ in range(steps):
-        model.zero_grad()
         outputs = model(perturbed)
         # Use negative cross-entropy to *maximize* loss (make the example unlearnable)
         loss = -criterion(outputs, torch.tensor([target_label], device=device))
@@ -170,16 +169,15 @@ class UnlearnableCIFAR10(torch.utils.data.Dataset):
         image, label = self.base_dataset[idx]
         image = image.unsqueeze(0).to(self.device)  # shape [1, C, H, W]
         # Generate the perturbed (unlearnable) image
-        with torch.no_grad():
-            perturbed = adaptive_frequency_attack(
-                image,
-                self.model,
-                label,
-                self.criterion,
-                steps=self.steps,
-                alpha=self.alpha,
-                device=self.device,
-            )
+        perturbed = adaptive_frequency_attack(
+            image,
+            self.model,
+            label,
+            self.criterion,
+            steps=self.steps,
+            alpha=self.alpha,
+            device=self.device,
+        )
         # Move back to CPU and remove batch dimension
         perturbed = perturbed.squeeze(0).cpu()
         return perturbed, label
@@ -306,14 +304,15 @@ def main():
         test_dataset, batch_size=batch_size, shuffle=False
     )
 
+    num_epochs = 30
     print("Training classifier on clean data:")
     model_clean = train_classifier(
-        clean_train_loader, test_loader, num_epochs=5, device=device
+        clean_train_loader, test_loader, num_epochs=num_epochs, device=device
     )
 
     print("\nTraining classifier on unlearnable (perturbed) data:")
     model_unlearnable = train_classifier(
-        unlearnable_train_loader, test_loader, num_epochs=5, device=device
+        unlearnable_train_loader, test_loader, num_epochs=num_epochs, device=device
     )
 
     # Here, you can compare the performance:
