@@ -1,0 +1,6 @@
+torch
+trochvision
+opencv-python
+numpy
+tqdm
+scikit-image
