@@ -120,6 +120,12 @@ def main():
         default=["a photo of a cat", "a scenic landscape"],
         help="Evaluation prompts",
     )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="./data",
+        help="Directory to save the COCO Captions dataset.",
+    )
     args = parser.parse_args()
 
     device = (
@@ -129,7 +135,9 @@ def main():
     )
 
     # Load and preprocess the COCO Captions dataset.
-    dataset = load_dataset("jxie/coco_captions", split="train", cache_dir="./data")
+    dataset = load_dataset("jxie/coco_captions", split="train", cache_dir=args.data_dir)
+    dataset = dataset.shuffle(seed=42).select(range(100))  # Use only 100 samples
+
     dataset = dataset.map(preprocess, num_proc=4)
     dataset.set_format(type="torch", columns=["pixel_values", "text"])
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
