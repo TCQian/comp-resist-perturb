@@ -1,5 +1,5 @@
 # This baseline fine‑tuning script trains the diffusion UNet on the COCO Captions dataset without any perturbation.
-# sd_train.py
+
 import argparse
 import os
 import torch
@@ -27,10 +27,7 @@ def preprocess(example):
     )
     image = example["image"]
     example["pixel_values"] = transform(image)
-    if isinstance(example["caption"], list):
-        example["text"] = example["caption"][0]
-    else:
-        example["text"] = example["caption"]
+    example["text"] = example["name"]  # Using butterfly name as caption
     return example
 
 
@@ -91,7 +88,7 @@ def visualize_results(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fine-tune Stable Diffusion on COCO Captions with mixed precision."
+        description="Fine-tune Stable Diffusion on Smithsonian Butterflies dataset."
     )
     parser.add_argument(
         "--output_dir",
@@ -109,22 +106,13 @@ def main():
         "--learning_rate", type=float, default=5e-6, help="Learning rate."
     )
     parser.add_argument(
-        "--eval",
-        type=bool,
-        default=False,
-        help="Evaluate the model after training.",
-    )
-    parser.add_argument(
-        "--prompt",
-        nargs="+",
-        default=["a photo of a cat", "a scenic landscape"],
-        help="Evaluation prompts",
+        "--eval", type=bool, default=False, help="Evaluate the model after training."
     )
     parser.add_argument(
         "--data_dir",
         type=str,
         default="./data",
-        help="Directory to save the COCO Captions dataset.",
+        help="Directory to save the dataset.",
     )
     args = parser.parse_args()
 
@@ -134,11 +122,10 @@ def main():
         else "mps" if torch.mps.is_available() else "cpu"
     )
 
-    # Load and preprocess the COCO Captions dataset.
-    dataset = load_dataset("jxie/coco_captions", split="train", cache_dir=args.data_dir)
-    dataset = dataset.shuffle(seed=42).select(range(100))  # Use only 100 samples
-
-    dataset = dataset.map(preprocess, num_proc=4)
+    dataset = load_dataset(
+        "huggan/smithsonian_butterflies_subset", split="train", cache_dir="./data"
+    )
+    dataset = dataset.map(preprocess)
     dataset.set_format(type="torch", columns=["pixel_values", "text"])
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
@@ -188,8 +175,10 @@ def main():
                     return_tensors="pt",
                 )
                 text_input_ids = text_inputs.input_ids.to(device)
+
                 with torch.no_grad():
                     encoder_hidden_states = text_encoder(text_input_ids)[0]
+
                 noise_pred = unet(
                     noisy_latents,
                     timesteps,

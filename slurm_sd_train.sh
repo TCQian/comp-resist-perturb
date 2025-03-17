@@ -11,4 +11,5 @@ source ~/.bashrc
 conda activate bni
 
 DATA_DIR=$(pwd)/data
-srun python sd_train.py --data_dir $DATA_DIR
+OUTPUT_DIR=$(pwd)/output
+srun python sd_train.py --data_dir $DATA_DIR --output_dir $OUTPUT_DIR
