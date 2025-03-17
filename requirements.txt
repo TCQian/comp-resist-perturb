@@ -1,5 +1,5 @@
 torch
-trochvision
+torchvision
 opencv-python
 numpy
 tqdm
