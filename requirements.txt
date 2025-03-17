@@ -7,3 +7,4 @@ datasets
 diffusers
 transformers
 matplotlib
+accelerate

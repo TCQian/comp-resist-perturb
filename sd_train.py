@@ -157,7 +157,8 @@ def main():
 
             with torch.no_grad():
                 latents = (
-                    vae.encode(images).latent_dist.sample() * vae.config.scaling_factor
+                    vae.encode(images.half).latent_dist.sample()
+                    * vae.config.scaling_factor
                 )
 
             noise = torch.randn_like(latents)
