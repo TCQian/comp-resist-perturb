@@ -129,7 +129,7 @@ def main():
     )
 
     # Load and preprocess the COCO Captions dataset.
-    dataset = load_dataset("jxie/coco_captions", split="train")
+    dataset = load_dataset("jxie/coco_captions", split="train", cache_dir="./data")
     dataset = dataset.map(preprocess, num_proc=4)
     dataset.set_format(type="torch", columns=["pixel_values", "text"])
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
