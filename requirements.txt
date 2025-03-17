@@ -3,4 +3,6 @@ trochvision
 opencv-python
 numpy
 tqdm
-scikit-image
+datasets
+diffusers
+matplotlib
