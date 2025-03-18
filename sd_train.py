@@ -160,6 +160,7 @@ def main():
         model_id, subfolder="scheduler", cache_dir=args.model_dir
     )
 
+    # Pre-visualization step: generate and display a grid of images.
     pipeline = StableDiffusionPipeline(
         vae=vae,
         text_encoder=text_encoder,
@@ -176,6 +177,7 @@ def main():
         output_path=args.output_dir + "pre_visualization.png",
     )
 
+    # Training loop
     optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate)
     scaler = GradScaler(enabled=(device == "cuda"))
     unet.train()
@@ -257,7 +259,7 @@ def main():
         pipeline,
         args.prompt,
         num_images_per_prompt=4,
-        output_path=args.output_dir + "visualization.png",
+        output_path=args.output_dir + "/visualization.png",
     )
 
 

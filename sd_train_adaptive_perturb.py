@@ -217,6 +217,7 @@ def main():
         output_path=args.output_dir + "pre_visualization.png",
     )
 
+    # Training loop
     optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate)
     scaler = GradScaler(enabled=(device == "cuda"))
     unet.train()
@@ -228,7 +229,9 @@ def main():
                 break
 
             images = batch["pixel_values"].to(device)
-            images = torch.stack([adaptive_frequency_attack(img) for img in images])
+            images = torch.stack([adaptive_frequency_attack(img) for img in images]).to(
+                device
+            )
             perturbed_image = images.clone()
             images = torch.stack(
                 [perform_jpeg_compression(img, quality=75) for img in images]
@@ -306,7 +309,7 @@ def main():
         pipeline,
         args.prompt,
         num_images_per_prompt=4,
-        output_path=args.output_dir + "visualization.png",
+        output_path=args.output_dir + "/visualization.png",
     )
 
 
