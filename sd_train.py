@@ -168,8 +168,7 @@ def main():
 
             with torch.no_grad():
                 latents = (
-                    vae.encode(images.half()).latent_dist.sample()
-                    * vae.config.scaling_factor
+                    vae.encode(images).latent_dist.sample() * vae.config.scaling_factor
                 )
 
             noise = torch.randn_like(latents)
@@ -211,11 +210,16 @@ def main():
             global_step += 1
 
     os.makedirs(args.output_dir, exist_ok=True)
-    unet.save_pretrained(os.path.join(args.output_dir, "unet"))
-    vae.save_pretrained(os.path.join(args.output_dir, "vae"))
-    text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
-    tokenizer.save_pretrained(os.path.join(args.output_dir, "tokenizer"))
-    scheduler.save_pretrained(os.path.join(args.output_dir, "scheduler"))
+    pipeline = StableDiffusionPipeline(
+        vae=vae,
+        text_encoder=text_encoder,
+        tokenizer=tokenizer,
+        unet=unet,
+        scheduler=scheduler,
+        safety_checker=None,
+        feature_extractor=None,
+    )
+    pipeline.save_pretrained(args.output_dir)
     print("Model saved to", args.output_dir)
 
     # Evaluation: load a diffusion pipeline from the fine-tuned model.
