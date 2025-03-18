@@ -20,7 +20,7 @@ from diffusers import (
 from transformers import CLIPTokenizer, CLIPTextModel
 from PIL import Image
 from io import BytesIO
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 import matplotlib.pyplot as plt
 
 
@@ -34,10 +34,7 @@ def preprocess(example):
     )
     image = example["image"]
     example["pixel_values"] = transform(image)
-    if isinstance(example["caption"], list):
-        example["text"] = example["caption"][0]
-    else:
-        example["text"] = example["caption"]
+    example["text"] = example["name"]  # Using butterfly name as caption
     return example
 
 
@@ -65,7 +62,7 @@ def adaptive_frequency_attack(image, steps=5, alpha=0.005):
     return torch.tensor(perturbed)
 
 
-def actual_jpeg_compression(image_tensor, quality=75):
+def perform_jpeg_compression(image_tensor, quality=75):
     pil_image = transforms.ToPILImage()(image_tensor.cpu())
     buffer = BytesIO()
     pil_image.save(buffer, format="JPEG", quality=quality)
@@ -104,7 +101,7 @@ def evaluate_model(pipeline, device, prompts, num_samples=4):
 
 
 def visualize_results(
-    pipeline, prompts, num_images_per_prompt=4, output_path="visualization_adaptive.png"
+    pipeline, prompts, num_images_per_prompt=4, output_path="visualization.png"
 ):
     rows = len(prompts)
     cols = num_images_per_prompt
@@ -131,12 +128,12 @@ def visualize_results(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Fine-tune Stable Diffusion with adaptive frequency perturbation (surviving JPEG) using mixed precision."
+        description="Fine-tune Stable Diffusion on Smithsonian Butterflies dataset."
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./sd_finetuned_adaptive",
+        default="./sd_finetuned",
         help="Directory to save the fine-tuned model.",
     )
     parser.add_argument(
@@ -149,32 +146,52 @@ def main():
         "--learning_rate", type=float, default=5e-6, help="Learning rate."
     )
     parser.add_argument(
-        "--eval_prompts",
-        nargs="+",
-        default=["a futuristic cityscape", "an impressionist painting"],
-        help="Evaluation prompts",
+        "--eval", type=bool, default=False, help="Evaluate the model after training."
+    )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default="./data",
+        help="Directory to save the dataset.",
+    )
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default="./model",
+        help="Directory to save the models.",
     )
     args = parser.parse_args()
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.mps.is_available() else "cpu"
+    )
 
-    dataset = load_dataset("coco_captions", split="train")
-    dataset = dataset.map(preprocess, num_proc=4)
+    dataset = load_dataset(
+        "huggan/smithsonian_butterflies_subset", split="train", cache_dir=args.data_dir
+    )
+    dataset = dataset.map(preprocess)
     dataset.set_format(type="torch", columns=["pixel_values", "text"])
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
     model_id = "CompVis/stable-diffusion-v1-4"
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-    text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(
-        device
+    tokenizer = CLIPTokenizer.from_pretrained(
+        "openai/clip-vit-large-patch14", cache_dir=args.model_dir
     )
+    text_encoder = CLIPTextModel.from_pretrained(
+        "openai/clip-vit-large-patch14",
+        cache_dir=args.model_dir,
+    ).to(device)
     vae = AutoencoderKL.from_pretrained(
-        model_id, subfolder="vae", torch_dtype=torch.float16
+        model_id, subfolder="vae", cache_dir=args.model_dir
     ).to(device)
     unet = UNet2DConditionModel.from_pretrained(
-        model_id, subfolder="unet", torch_dtype=torch.float16
+        model_id, subfolder="unet", cache_dir=args.model_dir
     ).to(device)
-    scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
+    scheduler = DDPMScheduler.from_pretrained(
+        model_id, subfolder="scheduler", cache_dir=args.model_dir
+    )
 
     optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate)
     scaler = GradScaler(enabled=(device == "cuda"))
@@ -186,30 +203,28 @@ def main():
             if global_step >= args.num_train_steps:
                 break
 
-            original_image = batch["pixel_values"].to(device)
-            # Apply the adaptive frequency attack.
-            perturbed_image = torch.stack(
-                [adaptive_frequency_attack(img) for img in original_image]
-            )
-            # Compress using actual JPEG compression.
-            compressed_image = torch.stack(
-                [actual_jpeg_compression(img, quality=75) for img in perturbed_image]
-            )
-            training_image = compressed_image.to(device)
+            images = batch["pixel_values"].to(device)
+            images = torch.stack([adaptive_frequency_attack(img) for img in images])
+            perturbed_image = images.clone()
+            images = torch.stack(
+                [perform_jpeg_compression(img, quality=75) for img in images]
+            ).to(device)
             prompts = batch["text"]
 
             with torch.no_grad():
                 latents = (
-                    vae.encode(training_image).latent_dist.sample()
-                    * vae.config.scaling_factor
+                    vae.encode(images).latent_dist.sample() * vae.config.scaling_factor
                 )
 
             noise = torch.randn_like(latents)
             timesteps = torch.randint(
-                0, scheduler.num_train_timesteps, (latents.shape[0],), device=device
+                0,
+                scheduler.config.num_train_timesteps,
+                (latents.shape[0],),
+                device=device,
             ).long()
 
-            with autocast(enabled=(device == "cuda")):
+            with autocast(device, enabled=(device == "cuda")):
                 noisy_latents = scheduler.add_noise(latents, noise, timesteps)
                 text_inputs = tokenizer(
                     prompts,
@@ -219,8 +234,10 @@ def main():
                     return_tensors="pt",
                 )
                 text_input_ids = text_inputs.input_ids.to(device)
+
                 with torch.no_grad():
                     encoder_hidden_states = text_encoder(text_input_ids)[0]
+
                 noise_pred = unet(
                     noisy_latents,
                     timesteps,
@@ -234,36 +251,39 @@ def main():
             scaler.update()
 
             if global_step % 50 == 0:
-                mse_diff = torch.nn.functional.mse_loss(
-                    perturbed_image, training_image
-                ).item()
+                mse_diff = torch.nn.functional.mse_loss(perturbed_image, images).item()
                 print(
-                    f"Step {global_step}: Loss {loss.item():.4f}, JPEG MSE Diff (adaptive) {mse_diff:.6f}"
+                    f"Step {global_step}: Loss {loss.item():.4f}, JPEG MSE Diff {mse_diff:.6f}"
                 )
             global_step += 1
 
     os.makedirs(args.output_dir, exist_ok=True)
-    unet.save_pretrained(os.path.join(args.output_dir, "unet"))
-    vae.save_pretrained(os.path.join(args.output_dir, "vae"))
-    text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
-    tokenizer.save_pretrained(os.path.join(args.output_dir, "tokenizer"))
-    scheduler.save_pretrained(os.path.join(args.output_dir, "scheduler"))
+    pipeline = StableDiffusionPipeline(
+        vae=vae,
+        text_encoder=text_encoder,
+        tokenizer=tokenizer,
+        unet=unet,
+        scheduler=scheduler,
+        safety_checker=None,
+        feature_extractor=None,
+    )
+    pipeline.save_pretrained(args.output_dir)
     print("Model saved to", args.output_dir)
 
-    pipeline = StableDiffusionPipeline.from_pretrained(
-        args.output_dir, torch_dtype=torch.float16
-    )
-    pipeline.to(device)
-    pipeline.enable_attention_slicing()
-    print("Evaluating model...")
-    evaluate_model(pipeline, device, args.eval_prompts)
+    # Evaluation: load a diffusion pipeline from the fine-tuned model.
+    if args.eval:
+        pipeline = StableDiffusionPipeline.from_pretrained(args.output_dir)
+        pipeline.to(device)
+        pipeline.enable_attention_slicing()
+        print("Evaluating model...")
+        evaluate_model(pipeline, device, args.prompt)
 
-    # Visualization: generate a grid of images for the evaluation prompts.
+    # Visualization step: generate and display a grid of images.
     visualize_results(
         pipeline,
-        args.eval_prompts,
+        args.prompt,
         num_images_per_prompt=4,
-        output_path="sd_train_adaptive_visualization.png",
+        output_path="sd_train_visualization.png",
     )
 
 
