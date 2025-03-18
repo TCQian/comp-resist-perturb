@@ -133,7 +133,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./sd_finetuned",
+        default="./sd_train_adaptive_perturb",
         help="Directory to save the fine-tuned model.",
     )
     parser.add_argument(
@@ -198,6 +198,23 @@ def main():
     ).to(device)
     scheduler = DDPMScheduler.from_pretrained(
         model_id, subfolder="scheduler", cache_dir=args.model_dir
+    )
+
+    # Pre-visualization step: generate and display a grid of images.
+    pipeline = StableDiffusionPipeline(
+        vae=vae,
+        text_encoder=text_encoder,
+        tokenizer=tokenizer,
+        unet=unet,
+        scheduler=scheduler,
+        safety_checker=None,
+        feature_extractor=None,
+    )
+    visualize_results(
+        pipeline,
+        args.prompt,
+        num_images_per_prompt=4,
+        output_path=args.output_dir + "pre_visualization.png",
     )
 
     optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate)
@@ -278,19 +295,18 @@ def main():
     print("Model saved to", args.output_dir)
 
     # Evaluation: load a diffusion pipeline from the fine-tuned model.
-    if args.eval:
-        pipeline = StableDiffusionPipeline.from_pretrained(args.output_dir)
-        pipeline.to(device)
-        pipeline.enable_attention_slicing()
-        print("Evaluating model...")
-        evaluate_model(pipeline, device, args.prompt)
+    pipeline = StableDiffusionPipeline.from_pretrained(args.output_dir)
+    pipeline.to(device)
+    pipeline.enable_attention_slicing()
+    print("Evaluating model...")
+    evaluate_model(pipeline, device, args.prompt)
 
     # Visualization step: generate and display a grid of images.
     visualize_results(
         pipeline,
         args.prompt,
         num_images_per_prompt=4,
-        output_path="sd_train_visualization.png",
+        output_path=args.output_dir + "visualization.png",
     )
 
 
