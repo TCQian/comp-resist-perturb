@@ -114,6 +114,12 @@ def main():
         default="./data",
         help="Directory to save the dataset.",
     )
+    parser.add_argument(
+        "--model_dir",
+        type=str,
+        default="./model",
+        help="Directory to save the models.",
+    )
     args = parser.parse_args()
 
     device = (
@@ -123,24 +129,30 @@ def main():
     )
 
     dataset = load_dataset(
-        "huggan/smithsonian_butterflies_subset", split="train", cache_dir="./data"
+        "huggan/smithsonian_butterflies_subset", split="train", cache_dir=args.data_dir
     )
     dataset = dataset.map(preprocess)
     dataset.set_format(type="torch", columns=["pixel_values", "text"])
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
 
     model_id = "CompVis/stable-diffusion-v1-4"
-    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
-    text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-large-patch14").to(
-        device
+    tokenizer = CLIPTokenizer.from_pretrained(
+        "openai/clip-vit-large-patch14", cache_dir=args.model_dir
     )
+    text_encoder = CLIPTextModel.from_pretrained(
+        "openai/clip-vit-large-patch14",
+        torch_dtype=torch.float16,
+        cache_dir=args.model_dir,
+    ).to(device)
     vae = AutoencoderKL.from_pretrained(
-        model_id, subfolder="vae", torch_dtype=torch.float16
+        model_id, subfolder="vae", torch_dtype=torch.float16, cache_dir=args.model_dir
     ).to(device)
     unet = UNet2DConditionModel.from_pretrained(
-        model_id, subfolder="unet", torch_dtype=torch.float16
+        model_id, subfolder="unet", torch_dtype=torch.float16, cache_dir=args.model_dir
     ).to(device)
-    scheduler = DDPMScheduler.from_pretrained(model_id, subfolder="scheduler")
+    scheduler = DDPMScheduler.from_pretrained(
+        model_id, subfolder="scheduler", cache_dir=args.model_dir
+    )
 
     optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate)
     scaler = GradScaler(enabled=(device == "cuda"))
@@ -157,16 +169,19 @@ def main():
 
             with torch.no_grad():
                 latents = (
-                    vae.encode(images.half).latent_dist.sample()
+                    vae.encode(images.half()).latent_dist.sample()
                     * vae.config.scaling_factor
                 )
 
             noise = torch.randn_like(latents)
             timesteps = torch.randint(
-                0, scheduler.num_train_timesteps, (latents.shape[0],), device=device
+                0,
+                scheduler.config.num_train_timesteps,
+                (latents.shape[0],),
+                device=device,
             ).long()
 
-            with autocast(enabled=(device == "cuda")):
+            with autocast(device, enabled=(device == "cuda")):
                 noisy_latents = scheduler.add_noise(latents, noise, timesteps)
                 text_inputs = tokenizer(
                     prompts,
