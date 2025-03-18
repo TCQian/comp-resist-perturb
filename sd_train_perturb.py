@@ -138,6 +138,13 @@ def main():
         default="./model",
         help="Directory to save the models.",
     )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        nargs="+",
+        default=["a butterfly with blue wings"],
+        help="Prompts for evaluation and visualization.",
+    )
     args = parser.parse_args()
 
     device = (
