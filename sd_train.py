@@ -141,14 +141,13 @@ def main():
     )
     text_encoder = CLIPTextModel.from_pretrained(
         "openai/clip-vit-large-patch14",
-        torch_dtype=torch.float16,
         cache_dir=args.model_dir,
     ).to(device)
     vae = AutoencoderKL.from_pretrained(
-        model_id, subfolder="vae", torch_dtype=torch.float16, cache_dir=args.model_dir
+        model_id, subfolder="vae", cache_dir=args.model_dir
     ).to(device)
     unet = UNet2DConditionModel.from_pretrained(
-        model_id, subfolder="unet", torch_dtype=torch.float16, cache_dir=args.model_dir
+        model_id, subfolder="unet", cache_dir=args.model_dir
     ).to(device)
     scheduler = DDPMScheduler.from_pretrained(
         model_id, subfolder="scheduler", cache_dir=args.model_dir
@@ -221,9 +220,7 @@ def main():
 
     # Evaluation: load a diffusion pipeline from the fine-tuned model.
     if args.eval:
-        pipeline = StableDiffusionPipeline.from_pretrained(
-            args.output_dir, torch_dtype=torch.float16
-        )
+        pipeline = StableDiffusionPipeline.from_pretrained(args.output_dir)
         pipeline.to(device)
         pipeline.enable_attention_slicing()
         print("Evaluating model...")
