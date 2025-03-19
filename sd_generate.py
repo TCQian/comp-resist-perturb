@@ -43,7 +43,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="./sd_train",
+        default="./test",
         help="Directory to save the fine-tuned model.",
     )
     parser.add_argument(

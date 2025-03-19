@@ -12,15 +12,15 @@ conda activate bni
 
 DATA_DIR=$(pwd)/data
 MODEL_DIR=$(pwd)/data
-OUTPUT_DIR=$(pwd)/sd_train_output
+OUTPUT_DIR=$(pwd)/output/sd_train_output
 srun python sd_train.py --data_dir $DATA_DIR --output_dir $OUTPUT_DIR --model_dir $MODEL_DIR
 
 DATA_DIR=$(pwd)/data
 MODEL_DIR=$(pwd)/data
-OUTPUT_DIR=$(pwd)/sd_train_perturb_output
+OUTPUT_DIR=$(pwd)/output/sd_train_perturb_output
 srun python sd_train_perturb.py --data_dir $DATA_DIR --output_dir $OUTPUT_DIR --model_dir $MODEL_DIR
 
 DATA_DIR=$(pwd)/data
 MODEL_DIR=$(pwd)/data
-OUTPUT_DIR=$(pwd)/sd_train_adaptive_perturb_output
+OUTPUT_DIR=$(pwd)/output/sd_train_adaptive_perturb_output
 srun python sd_train_adaptive_perturb.py --data_dir $DATA_DIR --output_dir $OUTPUT_DIR --model_dir $MODEL_DIR
