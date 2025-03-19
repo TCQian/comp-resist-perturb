@@ -214,7 +214,7 @@ def main():
         pipeline,
         args.prompt,
         num_images_per_prompt=4,
-        output_path=args.output_dir + "pre_visualization.png",
+        output_path=args.output_dir + "/pre_visualization.png",
     )
 
     # Training loop
