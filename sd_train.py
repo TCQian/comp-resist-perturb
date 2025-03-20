@@ -97,6 +97,12 @@ def main():
         help="Directory to save the fine-tuned model.",
     )
     parser.add_argument(
+        "--visual_output_dir",
+        type=str,
+        default="./sd_train_visual",
+        help="Directory to save the visualisation results.",
+    )
+    parser.add_argument(
         "--num_train_steps", type=int, default=1000, help="Number of training steps."
     )
     parser.add_argument(
@@ -242,7 +248,7 @@ def main():
         pipeline,
         args.prompt,
         num_images_per_prompt=4,
-        output_path=args.output_dir + "/visualization.png",
+        output_path=args.visual_output_dir + "/visualization.png",
     )
 
 
